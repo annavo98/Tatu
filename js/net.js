@@ -220,7 +220,7 @@
       if (st.phase === 'peek') who = this.seats.findIndex((s, i) => s.kind === 'bot' && !st.ready[i]);
       else if (st.phase === 'turn' || st.phase === 'drawn' || st.phase === 'action') who = this.seats[st.turn] && this.seats[st.turn].kind === 'bot' ? st.turn : -1;
       if (who < 0) return;
-      const delay = st.phase === 'peek' ? 600 : st.phase === 'turn' ? 1300 : 1600;
+      const delay = st.phase === 'peek' ? 500 : st.phase === 'turn' ? 1800 : 2400; // langsam genug, um jeden Schritt zu sehen
       this.botTimer = setTimeout(() => {
         const v = G.viewFor(this.state, who);
         this.bots[who].observe(v);

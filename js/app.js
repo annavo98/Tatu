@@ -22,6 +22,7 @@
     toastTimer: null,
     lastPhase: null,
     flipIds: new Set(),
+    marks: {},             // letzte sichtbare Aktion je Spieler, bleibt bis zu dessen nächstem Zug
   };
 
   /* ---------- Hilfen ---------- */
@@ -69,7 +70,17 @@
     view(v) {
       const first = !S.view;
       const prev = S.view;
+      const fresh = v.seq !== S.seenSeq && !first;
+      // Startpunkte der Animation VOR dem Neuzeichnen merken
+      const src = fresh ? { drawn: rectOf('.drawn .card-svg'), deck: rectOf('[aria-label^="Deck"] .card-svg') } : null;
       S.view = v;
+      if (v.last && v.seq !== S.seenSeq) {
+        const L = v.last;
+        if (L.type === 'draw' || L.type === 'call') delete S.marks[L.p];
+        if (['swap', 'bswap', 'peek', 'spy'].includes(L.type)) S.marks[L.p] = L;
+      }
+      if (v.phase === 'peek' || v.phase === 'roundEnd' || v.phase === 'gameEnd') S.marks = {};
+      if (fresh && v.last && v.last.p !== v.me) requestAnimationFrame(() => animateMove(v.last, src));
       if (v.seq !== S.seenSeq) {
         S.seenSeq = v.seq; S.hl = { seq: v.seq, until: Date.now() + 1900 };
         clearTimeout(S.hlTimer);
@@ -251,19 +262,71 @@
     if (opts.pick) cls.push('pick');
     if (opts.sel) cls.push('sel');
     if (opts.hl) cls.push('hl');
+    if (opts.tag) cls.push('tagged'); // nur Rahmen, kein Text (Wunsch 16.11.)
     if (face && S.flipIds.has(c.id)) cls.push('flip');
     const label = face ? '' : ` aria-label="${esc(opts.label || 'face-down card')}"`;
     return `<button class="${cls.join(' ')}" ${opts.pick ? '' : 'tabindex="-1"'} data-card="${opts.owner}:${opts.slot}"${label}>${face ? C.face(c.v) : C.back()}${opts.sel && opts.selNo ? `<span class="check">${opts.selNo}</span>` : ''}${opts.locked ? `<span class="lock" aria-label="locked">${ICON.lock}</span>` : ''}</button>`;
   }
 
-  function highlightSet(v) {
-    const set = new Set();
-    if (!v.last || Date.now() > S.hl.until || S.hl.seq !== v.last.seq) return set;
-    const L = v.last;
-    if (L.type === 'swap') { if (L.ok) set.add(L.p + ':' + L.newSlot); else { L.slots.forEach(s => set.add(L.p + ':' + s)); set.add(L.p + ':' + L.penaltySlot); } }
-    if (L.type === 'peek' || L.type === 'spy') set.add(L.owner + ':' + L.slot);
-    if (L.type === 'bswap') { set.add(L.p + ':' + L.slot); set.add(L.target + ':' + L.tslot); }
-    return set;
+  // Welche Karten tragen ein Schild? Bleibt stehen, bis die Person wieder dran ist (Wunsch 16.11.)
+  function marksMap(v) {
+    const m = new Map();
+    const fresh = v.last && S.hl.seq === v.last.seq && Date.now() < S.hl.until;
+    for (const k in S.marks) {
+      const L = S.marks[k];
+      const pulse = !!(fresh && L.seq === v.last.seq);
+      const put = (key, tag) => m.set(key, { tag, pulse });
+      if (L.type === 'swap' && L.ok) put(L.p + ':' + L.newSlot, L.slots.length > 1 ? 'new · ' + L.slots.length + '→1' : 'new');
+      if (L.type === 'swap' && !L.ok) { L.slots.forEach(s => put(L.p + ':' + s, 'shown')); if (L.penaltySlot !== null && L.penaltySlot !== undefined) put(L.p + ':' + L.penaltySlot, 'penalty'); }
+      if (L.type === 'peek') put(L.owner + ':' + L.slot, 'peeked');
+      if (L.type === 'spy') put(L.owner + ':' + L.slot, 'spied');
+      if (L.type === 'bswap') { put(L.p + ':' + L.slot, 'swapped'); put(L.target + ':' + L.tslot, 'swapped'); }
+    }
+    return m;
+  }
+
+  /* ---------- Bewegung: Gegnerzüge sichtbar machen ---------- */
+  function rectOf(sel) { const el = document.querySelector(sel); if (!el) return null; const r = el.getBoundingClientRect(); return r.width ? r : null; }
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function fly(svg, from, to, delay, hide) {
+    return new Promise(res => {
+      if (!from || !to) return res();
+      const el = document.createElement('div');
+      el.className = 'fly';
+      el.style.cssText = `left:${from.left}px;top:${from.top}px;width:${from.width}px;`;
+      el.innerHTML = svg;
+      document.body.appendChild(el);
+      if (hide) hide.style.visibility = 'hidden';
+      const dx = to.left - from.left, dy = to.top - from.top, sc = to.width / from.width;
+      const a = el.animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${dx}px,${dy}px) scale(${sc})` }],
+        { duration: 650, delay, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'both' });
+      a.onfinish = () => { el.remove(); if (hide) hide.style.visibility = ''; res(); };
+    });
+  }
+  async function animateMove(L, src) {
+    if (reduced() || !src) return;
+    const slotEl = (p, s) => document.querySelector(`[data-card="${p}:${s}"]`);
+    const discardEl = document.querySelector('[aria-label^="Discard"] .card-svg');
+    const deckR = rectOf('[aria-label^="Deck"] .card-svg') || src.deck;
+    if (L.type === 'swap') {
+      const start = src.drawn || deckR;
+      if (L.ok) {
+        const t = slotEl(L.p, L.newSlot);
+        if (!t) return;
+        await fly(C.back(), start, t.getBoundingClientRect(), 0, t);
+        await fly(C.face(L.values[0]), t.getBoundingClientRect(), discardEl && discardEl.getBoundingClientRect(), 80, discardEl);
+      } else {
+        await fly(C.back(), start, discardEl && discardEl.getBoundingClientRect(), 0, discardEl);
+        const t = L.penaltySlot !== null && L.penaltySlot !== undefined && slotEl(L.p, L.penaltySlot);
+        if (t) await fly(C.back(), deckR, t.getBoundingClientRect(), 80, t);
+      }
+    }
+    if (L.type === 'bswap') {
+      const a = slotEl(L.p, L.slot), b = slotEl(L.target, L.tslot);
+      if (!a || !b) return;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      fly(C.back(), ra, rb, 0, b); await fly(C.back(), rb, ra, 0, a);
+    }
   }
 
   function slotLabel(n, i) {
@@ -274,7 +337,8 @@
     const me = S.view.me;
     const myTurn = v.turn === me;
     const ph = v.phase;
-    const hl = highlightSet(v);
+    const marks = marksMap(v);
+    const mk = key => marks.get(key) || {};
     const cur = v.players[v.turn];
     const opps = v.players.map((p, i) => i).filter(i => i !== me);
     const seats = v.seats || [];
@@ -291,7 +355,7 @@
       const cols = n <= 6 ? n : Math.ceil(n / 2); // eine Reihe
       const off = seats[i] && seats[i].kind === 'remote' && !seats[i].online;
       const cards = p.cards.map((c, s) => cardHtml(c, {
-        owner: i, slot: s, pick: pickOpp(i), hl: hl.has(i + ':' + s),
+        owner: i, slot: s, pick: pickOpp(i), hl: mk(i + ':' + s).pulse, tag: mk(i + ':' + s).tag,
         sel: S.bsel.opp && S.bsel.opp.t === i && S.bsel.opp.s === s,
         locked: v.calledBy === i, label: p.name + ', ' + slotLabel(n, s),
       })).join('');
@@ -308,10 +372,13 @@
         <span class="slot"><span class="stack ${v.deckCount > 1 ? 'deep' : ''}">${v.deckCount ? C.back() : '<span class="empty" style="display:block"></span>'}</span></span><span class="cnt">Deck · ${v.deckCount}</span></button>`;
     const discard = `<button class="pile ${canDiscardDraw || canDiscardDrop ? 'can' : ''}" data-do="${canDiscardDraw ? 'draw-discard' : canDiscardDrop ? 'discard' : ''}" ${canDiscardDraw || canDiscardDrop ? '' : 'tabindex="-1"'} aria-label="Discard pile${v.discardTop ? ', top ' + v.discardTop.v : ''}">
         <span class="slot"><span class="stack ${v.discardCount > 1 ? 'deep' : ''}">${v.discardTop ? C.face(v.discardTop.v) : '<span class="empty" style="display:block"></span>'}</span></span><span class="cnt">Discard</span></button>`;
-    let drawn = '';
+    let drawn;
     if (v.drawn) {
       const face = 'v' in v.drawn;
-      drawn = `<div class="drawn ${S.hl.seq === (v.last && v.last.seq) && Date.now() < S.hl.until ? 'in' : ''}">${face ? C.face(v.drawn.v) : C.back()}<span class="lbl">${myTurn ? 'Your card' : esc(cur.name) + ' drew'}</span></div>`;
+      drawn = `<div class="drawn-zone full ${myTurn ? 'mine' : ''}"><div class="drawn ${S.hl.seq === (v.last && v.last.seq) && Date.now() < S.hl.until ? 'in' : ''}">${face ? C.face(v.drawn.v) : C.back()}</div>
+        <span class="lbl">${myTurn ? (v.drawnFrom === 'discard' ? 'You took' : 'You drew') : esc(cur.name) + (v.drawnFrom === 'discard' ? ' took' : ' drew')}</span></div>`;
+    } else {
+      drawn = `<div class="drawn-zone"><span class="ph">drawn<br>card</span></div>`;
     }
 
     // Eigene Hand
@@ -321,7 +388,7 @@
     const myCards = mineP.cards.map((c, s) => {
       const selIdx = S.sel.indexOf(s);
       const sel = selIdx >= 0 || S.bsel.mine === s;
-      return cardHtml(c, { owner: me, slot: s, pick: pickMine, sel, selNo: ph === 'drawn' && S.sel.length > 1 ? selIdx + 1 : 0, hl: hl.has(me + ':' + s), locked: v.calledBy === me, label: 'Your card, ' + slotLabel(n, s) });
+      return cardHtml(c, { owner: me, slot: s, pick: pickMine, sel, selNo: ph === 'drawn' && S.sel.length > 1 ? selIdx + 1 : 0, hl: mk(me + ':' + s).pulse, tag: mk(me + ':' + s).tag, locked: v.calledBy === me, label: 'Your card, ' + slotLabel(n, s) });
     }).join('');
 
     const P = promptFor(v, me);
@@ -335,7 +402,7 @@
       </header>
       <section class="opps">${oppHtml}</section>
       <p class="news" aria-live="polite">${esc(lastNews)}</p>
-      <section class="center">${deck}${drawn}${discard}</section>
+      <section class="center"><div class="piles">${deck}${discard}</div>${drawn}</section>
       <div class="mine-area">
         <div class="prompt ${P.cls}" aria-live="polite">${P.html}</div>
         <div class="mine-head">${esc(mineP.name)} (you) · ${mineP.total} pts${v.calledBy === me ? ' <span class="badge pink">TATU!</span>' : ''}</div>
