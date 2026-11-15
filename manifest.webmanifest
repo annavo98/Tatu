@@ -1,0 +1,12 @@
+{
+  "name": "Tatu! The card game",
+  "short_name": "Tatu!",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1F3B33",
+  "theme_color": "#1F3B33",
+  "lang": "en",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

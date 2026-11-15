@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tatu cards</title>
+<link rel="stylesheet" href="css/app.css">
+<style>
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; padding: 16px; max-width: 900px; margin: 0 auto; }
+  .gallery figure { margin: 0; text-align: center; font-size: 13px; font-weight: 700; }
+  .gallery .card-svg { width: 100%; height: auto; display: block; margin-bottom: 4px; }
+  .small { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 24px; max-width: 900px; margin: 0 auto; }
+  .small .card-svg { width: 44px; height: auto; }
+</style>
+</head>
+<body>
+<div style="padding:16px;max-width:900px;margin:0 auto"><h1>Tatu! cards</h1><p>All 14 values and the card back. 7 and 8: peek, 9 and 10: spy, 11 and 12: swap. Below in the size you see your opponent's cards. <a href="./">Back to the game</a></p></div>
+<div class="gallery" id="g"></div>
+<div class="small" id="s"></div>
+<script src="js/cards.js"></script>
+<script src="js/card-styles.js"></script>
+<script>
+  const C = window.TatuCards; let g = '', s = '';
+  for (let v = 0; v <= 13; v++) { g += `<figure>${C.face(v)}${v}</figure>`; s += C.face(v); }
+  g += `<figure>${C.back()}Card back</figure>`; s += C.back();
+  document.getElementById('g').innerHTML = g; document.getElementById('s').innerHTML = s;
+</script>
+</body>
+</html>
