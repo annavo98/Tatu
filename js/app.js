@@ -25,6 +25,9 @@
     marks: {},             // letzte sichtbare Aktion je Spieler, bleibt bis zu dessen nächstem Zug
   };
 
+  const WIDE = matchMedia('(min-width: 900px)');
+  WIDE.addEventListener('change', () => { if (S.screen === 'table') render(); });
+
   /* ---------- Hilfen ---------- */
   const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
   function pref(k, v) { if (v === undefined) return Net.load('tatu-' + k); Net.store('tatu-' + k, v); }
@@ -315,7 +318,8 @@
       el.innerHTML = svg;
       document.body.appendChild(el);
       if (hide) hide.style.visibility = 'hidden';
-      const dx = to.left - from.left, dy = to.top - from.top, sc = to.width / from.width;
+      const sc = Math.min(to.width, to.height) / from.width; // quer liegende Ziele: Breite und Höhe vertauscht
+      const dx = to.left + to.width / 2 - from.left - from.width * sc / 2, dy = to.top + to.height / 2 - from.top - from.height * sc / 2;
       const a = el.animate([{ transform: 'translate(0,0) scale(1)' }, { transform: `translate(${dx}px,${dy}px) scale(${sc})` }],
         { duration: 650, delay, easing: 'cubic-bezier(.3,.7,.2,1)', fill: 'both' });
       a.onfinish = () => { el.remove(); if (hide) hide.style.visibility = ''; res(); };
@@ -370,7 +374,7 @@
     // Ab dem eigenen Platz im Uhrzeigersinn: wer nach mir dran ist, steht links
     const N = v.players.length;
     opps.sort((a, b) => ((a - me + N) % N) - ((b - me + N) % N));
-    const oppHtml = opps.map(i => {
+    const oppBox = (i, side) => {
       const p = v.players[i];
       const n = p.cards.length;
       const cols = n <= 5 ? n : Math.ceil(n / 2);
@@ -379,12 +383,21 @@
       const cards = p.cards.map((c, s) => cardHtml(c, {
         owner: i, slot: s, pick: pickOpp(i), hl: mk(i + ':' + s).pulse, tag: mk(i + ':' + s).tag,
         sel: S.bsel.opp && S.bsel.opp.t === i && S.bsel.opp.s === s,
-        locked: v.calledBy === i, label: p.name + ', ' + slotLabel(n, s),
-      })).join('');
-      return `<div class="opp ${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? 'turn' : ''}">
+        locked: v.calledBy === i, label: p.name + ', card ' + (s + 1) + (side ? ' from the top' : ' from the left'),
+      })).map(h => side ? `<span class="rot">${h}</span>` : h).join('');
+      return `<div class="opp ${side ? 'side' : ''} ${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? 'turn' : ''}">
         <div class="opp-head"><span class="nm">${esc(p.name)}</span>${bot && !/bot$/i.test(p.name) ? '<span class="badge soft">bot</span>' : ''}${v.calledBy === i ? '<span class="badge pink">TATU!</span>' : ''}${off ? '<span class="badge off">offline</span>' : ''}${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? '<span class="badge turnb">turn</span>' : ''}<span class="pts">${p.total} pts</span></div>
-        <div class="hwrap"><div class="hand small" style="--cols:${cols}">${cards}</div></div></div>`;
-    }).join('');
+        ${side ? `<div class="hand side" style="--rows:${Math.max(4, Math.ceil(n / (n > 6 ? 2 : 1)))}">${cards}</div>` : `<div class="hwrap"><div class="hand small" style="--cols:${cols}">${cards}</div></div>`}</div>`;
+    };
+    // PC (Anna 18.11.: Anordnung B „Runder Tisch“): wer nach mir dran ist, sitzt links, dann gegenüber, dann rechts
+    const wide = WIDE.matches;
+    let ring = null;
+    if (wide) {
+      const o = opps.length;
+      ring = o === 1 ? { top: [opps[0]] } : o === 2 ? { left: opps[0], right: opps[1], top: [] }
+        : { left: opps[0], top: opps.slice(1, -1), right: opps[o - 1] };
+    }
+    const oppHtml = wide ? '' : opps.map(i => oppBox(i, false)).join('');
 
     // Mitte: Stapel, gezogene Karte, Ablage
     const canDeck = myTurn && ph === 'turn';
@@ -416,16 +429,23 @@
     const P = promptFor(v, me);
     const lastNews = v.log.length ? v.log[v.log.length - 1] : '';
 
-    return `<div class="table n${v.players.length}">
+    return `<div class="table n${v.players.length}${wide ? ' wide' : ''}">
       <header class="tbar">
         <button class="iconbtn exit" data-do="leave-confirm" aria-label="Leave game">${ICON.exit}<span>Exit</span></button>
         <div class="title"><b>Tatu!</b> · Round ${v.round}${v.online ? ' · ' + esc(v.code) : ''}</div>
         <button class="iconbtn" data-do="scores" aria-label="Scores">${ICON.scores}</button>
         <button class="iconbtn" data-do="menu" aria-label="Menu">${ICON.menu}</button>
       </header>
-      <section class="opps o${opps.length}">${oppHtml}</section>
+      ${wide ? `<section class="ring o${opps.length}">
+        ${ring.top.length ? `<div class="ring-top">${ring.top.map(i => oppBox(i, false)).join('')}</div>` : ''}
+        <div class="ring-mid">
+          <div class="seat-l">${ring.left !== undefined ? oppBox(ring.left, true) : ''}</div>
+          <div class="felt"><section class="center"><div class="piles">${deck}${discard}</div>${drawn}</section><p class="news" aria-live="polite">${esc(lastNews)}</p></div>
+          <div class="seat-r">${ring.right !== undefined ? oppBox(ring.right, true) : ''}</div>
+        </div></section>`
+      : `<section class="opps o${opps.length}">${oppHtml}</section>
       <p class="news" aria-live="polite">${esc(lastNews)}</p>
-      <section class="center"><div class="piles">${deck}${discard}</div>${drawn}</section>
+      <section class="center"><div class="piles">${deck}${discard}</div>${drawn}</section>`}
       <div class="mine-area">
         <div class="prompt ${P.cls}" aria-live="polite">${P.html}</div>
         <div class="mine-head">${esc(mineP.name)} (you) · ${mineP.total} pts${v.calledBy === me ? ' <span class="badge pink">TATU!</span>' : ''}</div>

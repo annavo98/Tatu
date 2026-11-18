@@ -322,3 +322,30 @@ body.on-table .sheet .btn.ghost { background: rgba(16, 50, 90, .08); }
 /* Punktetabelle mit 5 Spalten auf dem Handy */
 .scores th, .scores td { padding: 8px 4px; }
 .scores th { max-width: 64px; font-size: 15px; }
+
+/* ---------- PC: Anordnung B „Runder Tisch“ (Anna 18.11.) ---------- */
+.ring { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; margin-top: 6px; }
+.ring-top { display: flex; justify-content: center; gap: 18px; }
+.ring-top .opp { flex: 0 1 300px; }
+.ring-top .hand.small { --cw: clamp(26px, calc((100cqw - (var(--cols) - 1) * 8px) / var(--cols)), min(56px, 6.5vh)); --gap: 8px; }
+.ring-mid { flex: 1; display: grid; grid-template-columns: minmax(96px, auto) 1fr minmax(96px, auto); gap: 22px; align-items: center; }
+.seat-l, .seat-r { display: flex; justify-content: center; }
+.felt { align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border-radius: 999px; background: rgba(244, 236, 221, .06); padding: 14px 60px; min-height: 0; }
+.table.wide .center { margin: 0; }
+.table.wide .news { margin-top: 8px; }
+.table.wide .mine-area { margin-top: 10px; }
+/* Seitenplätze: Karten quer, untereinander (Platz 1 oben) */
+.opp.side { padding: 8px 10px 10px; text-align: center; }
+.opp.side .opp-head { flex-wrap: wrap; justify-content: center; gap: 4px 6px; max-width: 120px; margin: 0 auto 8px; }
+.opp.side .opp-head .nm { flex-basis: 100%; }
+.opp.side .opp-head .pts { margin-left: 0; }
+.hand.side { --sw: min(44px, calc((50vh - 200px) / var(--rows)), 4.8vh); display: grid; grid-template-rows: repeat(var(--rows), auto); grid-auto-flow: column; gap: 6px; justify-content: center; }
+.hand.side .rot { position: relative; display: block; width: calc(var(--sw) * 1.4); height: var(--sw); }
+.hand.side .rot > .c, .hand.side .rot > .c.sel, .hand.side .rot > .c.pick:hover { position: absolute; width: var(--sw); left: calc(var(--sw) * .2); top: calc(var(--sw) * -.2); transform: rotate(90deg); }
+.hand.side .rot > .c.sel { transform: rotate(90deg) translateY(-6px); }
+.hand.side .c::after, .hand.side .c::before { border-radius: 9px !important; }
+.hand.side .c .lock { width: 18px; height: 18px; }
+.table.wide .hand.big { --cw: max(52px, min(112px, 11.5vh, calc((min(100vw, 900px) - 48px - (var(--cols) - 1) * 12px) / var(--cols)))); }
+.table.wide .ring-top .hand.small { --cw: clamp(26px, calc((100cqw - (var(--cols) - 1) * 8px) / var(--cols)), min(56px, 5.8vh)); }
+.table.wide .felt { padding: 10px 60px; }
+.table.wide .mine-area { margin-top: 6px; }
