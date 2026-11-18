@@ -242,3 +242,83 @@ p { margin: 0 0 .7em; }
 @media (min-width: 600px) {
   .hand.small { --cw: 48px; }
 }
+
+/* ---------- 2 bis 5 Spieler, Handy und großer Bildschirm (18.11.) ---------- */
+/* Üben: Anzahl Bots */
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+.seg button { min-height: 52px; border-radius: var(--r-sm); border: 2px solid var(--line); background: var(--sand); font-size: 20px; font-weight: 900; cursor: pointer; }
+.seg button.on { background: var(--leaf); border-color: var(--leaf); color: #FFFDF7; }
+
+/* Ausgang: Symbol mit Wort, nicht nur ein Zeichen */
+.iconbtn.exit { display: flex; gap: 6px; padding: 0 12px 0 10px; font-weight: 850; font-size: 15px; }
+.iconbtn.exit svg { width: 22px; height: 22px; }
+.sheet .iconbtn { background: rgba(16, 50, 90, .08); }
+:root[data-theme="dark"] .sheet .iconbtn { background: rgba(255, 255, 255, .1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sheet .iconbtn { background: rgba(255, 255, 255, .1); } }
+.sheet-top { display: flex; align-items: flex-start; gap: 10px; }
+.sheet-top h2 { flex: 1; margin-top: 8px; }
+/* Knöpfe unten im Blatt bleiben immer sichtbar, auch bei 5 Ergebniszeilen */
+.sheet .foot { position: sticky; bottom: 0; background: var(--sand); padding: 10px 0 calc(var(--safe-b) + 16px); display: flex; flex-direction: column; gap: 10px; }
+.sheet:has(.foot) { padding-bottom: 0; }
+.sheet .foot .btn + .btn, .sheet .foot .row .btn { margin-top: 0; }
+.tscroll { overflow-x: auto; }
+.scores th { max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Gegner: Kartengröße passt sich dem Platz an */
+.opps { gap: 8px; }
+.opp { flex: 0 1 280px; min-width: 0; }
+.opps.o2 .opp, .opps.o3 .opp, .opps.o4 .opp { flex: 0 0 calc(50% - 4px); }
+.opp-head { min-width: 0; }
+.opp-head .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.opp-head .pts { white-space: nowrap; }
+.badge.soft { background: rgba(244, 236, 221, .16); color: inherit; }
+.hwrap { container-type: inline-size; }
+.hand.small { --gap: 6px; --cw: clamp(22px, calc((100cqw - (var(--cols) - 1) * 6px) / var(--cols)), 52px); }
+.opps.o3 .opp, .opps.o4 .opp { padding: 6px 10px 8px; border-radius: 18px; }
+.opps.o3 .opp-head, .opps.o4 .opp-head { font-size: 14px; margin-bottom: 4px; gap: 6px; }
+.opps.o3 .badge, .opps.o4 .badge { font-size: 11px; padding: 2px 7px; }
+.opps.o3 .hand.small, .opps.o4 .hand.small { --cw: clamp(22px, calc((100cqw - (var(--cols) - 1) * 6px) / var(--cols)), 40px); }
+
+/* Eigene Hand: nie höher, als der Bildschirm hergibt */
+.hand.big { --cw: max(44px, min(88px, 11.5vh, calc((min(100vw, 560px) - 24px - (var(--cols) - 1) * 8px) / var(--cols)))); }
+/* Volle Tische auf dem Handy: Mitte etwas kompakter */
+.table.n4 .center, .table.n5 .center { margin: 10px 0 8px; }
+.table.n4 .pile, .table.n5 .pile { width: min(76px, 9.5vh); }
+.table.n4 .drawn-zone, .table.n5 .drawn-zone { max-width: 116px; }
+.table.n4 .news, .table.n5 .news { margin-top: 6px; font-size: 14px; }
+.table.n4 .actions, .table.n5 .actions { padding-top: 10px; }
+
+/* Großer Bildschirm (PC, Tablet quer): breiter Tisch, alle Gegner in einer Reihe */
+@media (min-width: 900px) {
+  body.on-table #app { max-width: 1240px; }
+  .table { padding: calc(var(--safe-t) + 12px) 24px 0; }
+  .opps { flex-wrap: nowrap; gap: 14px; }
+  .opps .opp, .opps.o2 .opp, .opps.o3 .opp, .opps.o4 .opp { flex: 1 1 0; max-width: 300px; padding: 10px 14px 12px; }
+  .opps.o3 .opp-head, .opps.o4 .opp-head { font-size: 16px; }
+  .hand.small, .opps.o3 .hand.small, .opps.o4 .hand.small { --gap: 8px; --cw: clamp(26px, calc((100cqw - (var(--cols) - 1) * 8px) / var(--cols)), min(60px, 6.5vh)); }
+  .center, .table.n4 .center, .table.n5 .center { justify-content: center; gap: 28px; margin: 12px 0 8px; }
+  .pile, .table.n4 .pile, .table.n5 .pile { width: min(108px, 11vh); }
+  .drawn-zone, .table.n4 .drawn-zone, .table.n5 .drawn-zone { flex: 0 0 auto; width: min(150px, 15vh); max-width: none; }
+  .drawn-zone .drawn { max-width: min(116px, 11.5vh); }
+  .news { font-size: 16px; }
+  .prompt { max-width: 660px; margin-left: auto; margin-right: auto; }
+  .hand.big { --gap: 12px; --cw: max(52px, min(116px, 12.5vh, calc((min(100vw, 900px) - 48px - (var(--cols) - 1) * 12px) / var(--cols)))); }
+  .actions { max-width: 660px; width: 100%; margin: 0 auto; }
+  /* Blätter als Fenster in der Mitte statt von unten */
+  .layer { align-items: center; padding: 24px; }
+  .sheet { max-width: 620px; border-radius: var(--r-lg); max-height: 88dvh; padding-bottom: 18px; }
+  .res-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .res-list .res { margin: 0; }
+  .sheet:has(.res-list) { max-width: 760px; }
+}
+@media (min-width: 900px) and (hover: hover) {
+  .c.pick:not(.sel):hover { transform: translateY(-4px); }
+  .pile.can:hover, .btn:not(:disabled):hover { filter: brightness(1.06); }
+}
+/* Graue Knöpfe in Blättern: auf hellem Blatt sichtbar, auch wenn der Tisch dahinter liegt */
+body.on-table .sheet .btn.ghost { background: rgba(16, 50, 90, .08); }
+:root[data-theme="dark"] body.on-table .sheet .btn.ghost { background: rgba(255, 255, 255, .1); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body.on-table .sheet .btn.ghost { background: rgba(255, 255, 255, .1); } }
+/* Punktetabelle mit 5 Spalten auf dem Handy */
+.scores th, .scores td { padding: 8px 4px; }
+.scores th { max-width: 64px; font-size: 15px; }

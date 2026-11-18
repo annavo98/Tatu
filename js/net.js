@@ -7,8 +7,8 @@
   const PREFIX = 'tatu-spiel-';
   const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   const HOST_KEY = 'tatu-host';
-  const MAX_SEATS = 4;
-  const BOT_NAMES = ['Tatu Bot', 'Jaguar Bot', 'Toucan Bot'];
+  const MAX_SEATS = 5; // 2 bis 5 Personen (Anna 18.11.)
+  const BOT_NAMES = ['Tatu Bot', 'Jaguar Bot', 'Toucan Bot', 'Capybara Bot', 'Macaw Bot'];
 
   function makeCode() {
     let c = '';
@@ -49,7 +49,7 @@
         this.code = makeCode();
         this.seats = [{ name: opts.name, kind: 'local', cid: opts.cid, online: true }];
         this.state = null;
-        if (!this.online) this.addBot();
+        if (!this.online) { const n = Math.max(1, Math.min(MAX_SEATS - 1, opts.bots || 1)); for (let i = 0; i < n; i++) this.addBot(); }
       }
       this.seats.forEach((s, i) => { if (s.kind === 'bot') this.bots[i] = new root.TatuBot(i); });
       if (this.state) this.seats.forEach((s, i) => { if (s.kind === 'bot') this.bots[i].observe(G.viewFor(this.state, i)); });
@@ -123,6 +123,14 @@
         this.push();
         return;
       }
+      if (msg.t === 'bye') {
+        // Gast verlässt das Spiel bewusst: vor dem Start Platz frei machen, danach spielt ein Bot weiter
+        const seat = Number(Object.keys(this.conns).find(k => this.conns[k] === conn));
+        if (Number.isNaN(seat)) return;
+        if (!this.started) { delete this.conns[seat]; this.removeSeat(seat); this.save(); }
+        else this.botTakeover(seat, 'left the game');
+        return;
+      }
       if (msg.t === 'act') {
         const seat = Number(Object.keys(this.conns).find(k => this.conns[k] === conn));
         if (Number.isNaN(seat)) return;
@@ -158,6 +166,18 @@
       this.conns = conns; this.bots = bots;
       for (const k in this.conns) this.conns[k].send({ t: 'welcome', seat: Number(k) });
       this.pushLobby();
+    }
+
+    // Ein Bot übernimmt einen Platz, damit die anderen weiterspielen können. Er weiß nichts über die Karten.
+    botTakeover(i, why) {
+      const s = this.seats[i];
+      if (!this.started || !s || s.kind !== 'remote') return;
+      if (this.conns[i]) { try { this.conns[i].close(); } catch (e) { /* */ } delete this.conns[i]; }
+      s.kind = 'bot'; s.online = true; s.cid = null;
+      this.bots[i] = new root.TatuBot(i);
+      const text = `${s.name} ${why}. A bot plays their cards from now on.`;
+      this.state.log.push(text);
+      this.afterChange([{ to: 'all', type: 'left', name: s.name, text }]);
     }
 
     startGame() {
@@ -333,7 +353,8 @@
       if (!this.conn || !this.conn.open) { this.retry = 0; this.scheduleRetry(); }
     }
 
-    leave() { this.closed = true; try { if (this.conn) this.conn.close(); if (this.peer) this.peer.destroy(); } catch (e) { /* */ } }
+    leave() { this.closed = true; try { if (this.conn && this.conn.open) this.conn.send({ t: 'bye' }); } catch (e) { /* */ } setTimeout(() => this.close(), 250); }
+    close() { try { if (this.conn) this.conn.close(); if (this.peer) this.peer.destroy(); } catch (e) { /* */ } }
   }
 
   root.TatuNet = { HostSession, GuestSession, makeCode, loadHost: () => load(HOST_KEY), clearHost: () => store(HOST_KEY, null), store, load };

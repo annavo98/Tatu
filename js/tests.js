@@ -31,6 +31,26 @@
     eq(s.players.map(p => p.hand.length), [4, 4]); eq(s.discard.length, 1); eq(s.deck.length, 43); eq(s.phase, 'peek');
   });
 
+  test('5 Personen: je 4 Karten, Stapel 31, Reihum über alle fünf', () => {
+    const s = G.newGame(['A', 'B', 'C', 'D', 'E']); G.startRound(s, seeded(5));
+    eq(s.players.map(p => p.hand.length), [4, 4, 4, 4, 4]); eq(s.deck.length, 31); eq(cardsInGame(s), 52);
+    s.players.forEach((_, i) => { G.apply(s, i, { type: 'startPeek', slot: 0 }); G.apply(s, i, { type: 'startPeek', slot: 1 }); G.apply(s, i, { type: 'ready' }); });
+    const seen = [];
+    for (let k = 0; k < 6; k++) { seen.push(s.turn); G.apply(s, s.turn, { type: 'draw', from: 'deck' }); G.apply(s, s.turn, { type: 'swap', slots: [0] }); }
+    eq(seen, [0, 1, 2, 3, 4, 0]);
+    for (let i = 1; i < 5; i++) ok(!G.viewFor(s, i).players.some((p, j) => j !== i && p.cards.some(c => 'v' in c)), 'niemand sieht fremde Karten');
+  });
+
+  test('5 Personen: nach dem Tatu-Ruf haben genau die vier anderen noch einen Zug', () => {
+    const s = G.newGame(['A', 'B', 'C', 'D', 'E']); G.startRound(s, seeded(6));
+    s.players.forEach((_, i) => { G.apply(s, i, { type: 'startPeek', slot: 0 }); G.apply(s, i, { type: 'startPeek', slot: 1 }); G.apply(s, i, { type: 'ready' }); });
+    const caller = s.turn;
+    eq(G.apply(s, caller, { type: 'call' }).ok, true);
+    let turns = 0;
+    while (s.phase === 'turn') { ok(s.turn !== caller, 'Rufende ist nicht mehr dran'); G.apply(s, s.turn, { type: 'draw', from: 'deck' }); G.apply(s, s.turn, { type: 'swap', slots: [0] }); turns++; }
+    eq(turns, 4); eq(s.phase, 'roundEnd'); eq(s.result.points.length, 5);
+  });
+
   test('Startkarten: zwei frei wählbar, nur für mich sichtbar, Gemerkt erst nach zwei', () => {
     const s = G.newGame(['A', 'B']); G.startRound(s, seeded(3));
     eq(G.viewFor(s, 0).players[0].cards.some(c => 'v' in c), false, 'vor der Wahl alles verdeckt');
@@ -253,10 +273,10 @@
     eq(s.round, 2); eq(s.turn, (t + 1) % 2); eq(s.players.map(p => p.total), totals); eq(s.phase, 'peek');
   });
 
-  test('Bot spielt 200 Runden gegen Bot ohne Fehler, Karten bleiben 52', () => {
+  test('Bot spielt 200 Runden gegen Bot (2 bis 5 Personen) ohne Fehler, Karten bleiben 52', () => {
     for (let g = 0; g < 200; g++) {
       const rng = seeded(100 + g);
-      const s = G.newGame(['B1', 'B2', 'B3'].slice(0, 2 + (g % 2)));
+      const s = G.newGame(['B1', 'B2', 'B3', 'B4', 'B5'].slice(0, 2 + (g % 4)));
       G.startRound(s, rng);
       const bots = s.players.map((_, i) => new window.TatuBot(i));
       bots.forEach((b, i) => { for (let k = 0; k < 4 && !s.ready[i]; k++) { const v = G.viewFor(s, i); b.observe(v); const r = G.apply(s, i, b.decide(v, rng)); if (!r.ok) throw new Error('Startwahl: ' + r.error); } b.observe(G.viewFor(s, i)); });

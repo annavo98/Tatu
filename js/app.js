@@ -38,6 +38,7 @@
     menu: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
     scores: '<svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>',
     lock: '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5" fill="currentColor"/><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>',
+    exit: '<svg viewBox="0 0 24 24"><path d="M14 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7M11 12h10M17 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     share: '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 15V3M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   };
   function wavesSvg() {
@@ -108,6 +109,7 @@
         const me = v && ev.by === v.me;
         toast('TATU!', me ? 'You called it. Everyone else gets one more turn.' : name + ' called it. You get one more turn.');
       } else if (ev.type === 'newRound') { S.reveals = []; }
+      else if (ev.type === 'left') toast(ev.name + ' left', 'A bot plays their cards from now on.');
       else if (ev.type === 'reshuffle') toast('Reshuffled!', 'The deck ran out. The discard pile is the new deck (' + ev.count + ' cards).');
     },
     lobby(l) { S.lobby = l; if (!l.started && S.screen !== 'table') { S.screen = 'lobby'; render(); } else if (S.screen === 'lobby') render(); },
@@ -115,10 +117,11 @@
     rejected() { S.screen = 'home'; S.session = null; S.view = null; render(); },
   };
 
+  function botCount() { const n = Number(pref('bots')); return n >= 1 && n <= 4 ? n : 1; }
   function startHost(online) {
     const name = readName();
     if (!name) return;
-    const s = new Net.HostSession({ name, cid: cid(), online }, ui);
+    const s = new Net.HostSession({ name, cid: cid(), online, bots: botCount() }, ui);
     S.session = s; S.view = null;
     try { sessionStorage.setItem('tatu-host-tab', s.code); } catch (e) { /* */ }
     if (online) history.replaceState(null, '', '?room=' + s.code);
@@ -160,6 +163,16 @@
     setStatus('', 'ok');
     render();
   }
+  // Ausgang: eine Rückfrage, die sagt, was mit den anderen passiert
+  function leaveAsk() {
+    if (!S.session) { leave(); return; }
+    const host = S.session.isHost;
+    const online = S.view ? S.view.online : S.session.online;
+    const humans = S.view && S.view.seats ? S.view.seats.filter(s => s.kind === 'remote').length : 0;
+    if (host && (!online || !humans)) ask('Leave the game?', online ? 'The room will be closed.' : 'This practice game will be deleted.', 'Yes, leave', leave, 'pink');
+    else if (host) ask('End the game for everyone?', 'You opened the room. When you leave, the game ends for all players.', 'Yes, end it', leave, 'pink');
+    else ask('Leave the game?', 'A bot takes over your cards so the others can keep playing. You can’t come back to this game.', 'Yes, leave', leave, 'pink');
+  }
   function act(a) { if (S.session) S.session.act(a); }
   // Eigene Rückfrage statt confirm(): das Browserfenster wird in manchen Umgebungen still unterdrückt
   function ask(title, text, yes, onYes, cls) { S.ask = { title, text, yes, onYes, cls }; renderLayer(); }
@@ -192,7 +205,12 @@
       <section class="panel">
         <label class="field"><span>Your name</span><input id="name" maxlength="16" autocomplete="nickname" value="${name}" placeholder="e.g. Sam"></label>
         <button class="btn primary" data-do="host">Start an online game</button>
-        <button class="btn ghost" data-do="bot">Practice against the bot</button>
+      </section>
+      <section class="panel">
+        <h2>Practice offline</h2>
+        <p class="muted small-text" style="margin:0 0 10px">Play alone against bots. How many?</p>
+        <div class="seg" role="radiogroup" aria-label="Number of bots">${[1, 2, 3, 4].map(n => `<button role="radio" aria-checked="${botCount() === n}" class="${botCount() === n ? 'on' : ''}" data-do="bots" data-n="${n}">${n}</button>`).join('')}</div>
+        <button class="btn ghost" data-do="bot">Play against ${botCount() === 1 ? 'the bot' : botCount() + ' bots'}</button>
       </section>
       <section class="panel">
         <h2>Join a room</h2>
@@ -240,7 +258,7 @@
     return `<div class="view">
       <section class="panel">
         <h2>Your room</h2>
-        <p class="muted small-text" style="margin:0">Send the link or the code to the other players:</p>
+        <p class="muted small-text" style="margin:0">Send the link or the code to the other players (2 to 5 players):</p>
         <div class="code" aria-label="Room code">${esc(l.code || '')}</div>
         <div class="linkbox">${esc(l.link || '')}</div>
         <div class="row"><button class="btn primary" data-do="share">${ICON.share} Share link</button><button class="btn ghost" data-do="copy">Copy</button></div>
@@ -250,7 +268,7 @@
         <ul class="seats">${seats}</ul>
         ${l.seats.length < 2 ? '<p class="muted small-text">Waiting for players … As soon as someone opens the link, their name shows up here.</p>' : ''}
         <button class="btn leaf" data-do="start" ${ready ? '' : 'disabled'}>Let's go!</button>
-        ${l.seats.length < 4 ? '<button class="btn ghost" data-do="addbot">Add a bot</button>' : ''}
+        ${l.seats.length < 5 ? '<button class="btn ghost" data-do="addbot">Add a bot</button>' : '<p class="muted small-text">The room is full (5 players).</p>'}
         <button class="btn ghost" data-do="leave">Close room</button>
       </section></div>`;
   }
@@ -349,19 +367,23 @@
     const pickMine = startPick || (myTurn && (ph === 'drawn' || (ph === 'action' && (v.action === 'peek' || v.action === 'swap'))));
     const pickOpp = i => myTurn && ph === 'action' && (v.action === 'spy' || (v.action === 'swap' && i !== v.calledBy));
 
+    // Ab dem eigenen Platz im Uhrzeigersinn: wer nach mir dran ist, steht links
+    const N = v.players.length;
+    opps.sort((a, b) => ((a - me + N) % N) - ((b - me + N) % N));
     const oppHtml = opps.map(i => {
       const p = v.players[i];
       const n = p.cards.length;
-      const cols = n <= 6 ? n : Math.ceil(n / 2); // eine Reihe
+      const cols = n <= 5 ? n : Math.ceil(n / 2);
       const off = seats[i] && seats[i].kind === 'remote' && !seats[i].online;
+      const bot = seats[i] && seats[i].kind === 'bot';
       const cards = p.cards.map((c, s) => cardHtml(c, {
         owner: i, slot: s, pick: pickOpp(i), hl: mk(i + ':' + s).pulse, tag: mk(i + ':' + s).tag,
         sel: S.bsel.opp && S.bsel.opp.t === i && S.bsel.opp.s === s,
         locked: v.calledBy === i, label: p.name + ', ' + slotLabel(n, s),
       })).join('');
       return `<div class="opp ${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? 'turn' : ''}">
-        <div class="opp-head">${esc(p.name)}${v.calledBy === i ? '<span class="badge pink">TATU!</span>' : ''}${off ? '<span class="badge off">offline</span>' : ''}${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? '<span class="badge turnb">turn</span>' : ''}<span class="pts">${p.total} pts</span></div>
-        <div class="hand small ${cols > 4 ? 'many' : ''}" style="--cols:${cols}">${cards}</div></div>`;
+        <div class="opp-head"><span class="nm">${esc(p.name)}</span>${bot && !/bot$/i.test(p.name) ? '<span class="badge soft">bot</span>' : ''}${v.calledBy === i ? '<span class="badge pink">TATU!</span>' : ''}${off ? '<span class="badge off">offline</span>' : ''}${v.turn === i && (ph === 'turn' || ph === 'drawn' || ph === 'action') ? '<span class="badge turnb">turn</span>' : ''}<span class="pts">${p.total} pts</span></div>
+        <div class="hwrap"><div class="hand small" style="--cols:${cols}">${cards}</div></div></div>`;
     }).join('');
 
     // Mitte: Stapel, gezogene Karte, Ablage
@@ -394,13 +416,14 @@
     const P = promptFor(v, me);
     const lastNews = v.log.length ? v.log[v.log.length - 1] : '';
 
-    return `<div class="table">
+    return `<div class="table n${v.players.length}">
       <header class="tbar">
-        <button class="iconbtn" data-do="menu" aria-label="Menu">${ICON.menu}</button>
+        <button class="iconbtn exit" data-do="leave-confirm" aria-label="Leave game">${ICON.exit}<span>Exit</span></button>
         <div class="title"><b>Tatu!</b> · Round ${v.round}${v.online ? ' · ' + esc(v.code) : ''}</div>
         <button class="iconbtn" data-do="scores" aria-label="Scores">${ICON.scores}</button>
+        <button class="iconbtn" data-do="menu" aria-label="Menu">${ICON.menu}</button>
       </header>
-      <section class="opps">${oppHtml}</section>
+      <section class="opps o${opps.length}">${oppHtml}</section>
       <p class="news" aria-live="polite">${esc(lastNews)}</p>
       <section class="center"><div class="piles">${deck}${discard}</div>${drawn}</section>
       <div class="mine-area">
@@ -541,21 +564,23 @@
         ${note}
         <div class="res-pts"><span class="plus">+${r.points[i]}</span><span>total ${r.totals[i]}</span></div></div>`;
     }).join('');
-    return `<h2>${title}</h2>
+    const next = `<button class="btn primary" data-do="${over ? 'newgame' : 'nextround'}">${over ? 'New game' : 'Next round'}</button>`;
+    const exit = over ? 'leave' : 'leave-confirm';
+    return `<div class="sheet-top"><h2>${title}</h2><button class="iconbtn exit" data-do="${exit}" aria-label="Leave game">${ICON.exit}<span>Exit</span></button></div>
       ${over ? '<p class="muted">Someone went over 100 points. Fewest points wins.</p>' : ''}
-      ${rows}
-      <button class="btn primary" data-do="${over ? 'newgame' : 'nextround'}">${over ? 'New game' : 'Next round'}</button>
-      <button class="btn ghost" data-do="scores">Scoreboard</button>`;
+      <div class="res-list">${rows}</div>
+      <div class="foot">${next}
+        <div class="row"><button class="btn ghost" data-do="scores">Scoreboard</button><button class="btn ghost" data-do="${exit}">${over ? 'Back to start' : 'Leave game'}</button></div></div>`;
   }
 
   function scoresHtml(v) {
     const head = v.players.map(p => `<th>${esc(p.name)}</th>`).join('');
     const rows = v.history.map(h => `<tr><td>Round ${h.round}</td>${h.points.map(x => `<td>+${x}</td>`).join('')}</tr>`).join('');
     return `<h2>Scores</h2>
-      <table class="scores"><thead><tr><th></th>${head}</tr></thead><tbody>${rows || `<tr><td colspan="${v.players.length + 1}">No rounds scored yet.</td></tr>`}</tbody>
-      <tfoot><tr><td>Total</td>${v.players.map(p => `<td>${p.total}</td>`).join('')}</tr></tfoot></table>
+      <div class="tscroll"><table class="scores"><thead><tr><th></th>${head}</tr></thead><tbody>${rows || `<tr><td colspan="${v.players.length + 1}">No rounds scored yet.</td></tr>`}</tbody>
+      <tfoot><tr><td>Total</td>${v.players.map(p => `<td>${p.total}</td>`).join('')}</tr></tfoot></table></div>
       <p class="muted small-text">Going over 100 ends the game. Exactly 100 drops back to 50.</p>
-      <button class="btn primary" data-do="close-sheet">Close</button>`;
+      <div class="foot"><button class="btn primary" data-do="close-sheet">Close</button></div>`;
   }
 
   function menuHtml() {
@@ -565,8 +590,15 @@
       ${v && v.online && host ? `<p class="muted small-text">Room ${esc(v.code)}. If someone lost the connection: just send the link again.</p><button class="btn ghost" data-do="share">Share room link</button>` : ''}
       <button class="btn ghost" data-do="rules">How to play</button>
       <button class="btn ghost" data-do="theme">Light / dark mode</button>
-      <button class="btn ghost" data-do="leave-confirm">${host ? 'End game' : 'Leave game'}</button>
+      ${offlineHtml(v, host)}
+      <button class="btn ghost" data-do="leave-confirm">${host && v && v.online ? 'End game for everyone' : 'Leave game'}</button>
       <button class="btn primary" data-do="close-sheet">Keep playing</button>`;
+  }
+  // Gastgeberin: wer offline ist, kann von einem Bot vertreten werden, damit die anderen weiterspielen
+  function offlineHtml(v, host) {
+    if (!host || !v || !v.seats) return '';
+    return v.seats.map((s, i) => s.kind === 'remote' && !s.online
+      ? `<button class="btn ghost" data-do="takeover" data-i="${i}"><span class="two">Let a bot play for ${esc(s.name)}<small>${esc(s.name)} is offline</small></span></button>` : '').join('');
   }
 
   function rulesHtml() {
@@ -574,7 +606,7 @@
     return `<div class="rules"><h2>How to play Tatu!</h2>
       <p><b>Goal:</b> have as few points as possible in front of you at the end of each round. Once someone goes over 100 points, the game ends and the player with the fewest points wins.</p>
       <h3>Start</h3>
-      <ul><li>Everyone gets 4 face-down cards and looks at <b>two of their cards</b> once (free choice). Remember them!</li></ul>
+      <ul><li>2 to 5 players. Missing someone? Add bots, or practice alone against 1 to 4 bots.</li><li>Everyone gets 4 face-down cards and looks at <b>two of their cards</b> once (free choice). Remember them!</li></ul>
       <h3>Your turn: do one of these</h3>
       <ul>
         <li><b>Draw from the deck.</b> Then swap it with one of your cards (the old one goes face up onto the discard pile) or discard it.</li>
@@ -651,6 +683,8 @@
     switch (d) {
       case 'host': startHost(true); break;
       case 'bot': startHost(false); break;
+      case 'bots': { const nm = document.getElementById('name'); if (nm && nm.value.trim()) pref('name', nm.value.trim().slice(0, 16)); pref('bots', Number(el.dataset.n)); render(); break; }
+      case 'takeover': S.sheet = null; renderLayer(); S.session.botTakeover(Number(el.dataset.i), 'is offline'); break;
       case 'join': startGuest(document.getElementById('code').value); break;
       case 'join-link': startGuest(S.joinCode); break;
       case 'resume': { const saved = Net.loadHost(); if (saved) resumeHost(saved); break; }
@@ -668,7 +702,7 @@
       case 'kick': S.session.removeSeat(Number(el.dataset.i)); break;
       case 'start': S.session.startGame(); break;
       case 'leave': leave(); break;
-      case 'leave-confirm': S.sheet = null; ask(S.session && S.session.isHost ? 'End the game for everyone?' : 'Leave the game?', S.session && S.session.isHost ? 'The other players will be removed too.' : 'You can rejoin with the link.', S.session && S.session.isHost ? 'Yes, end it' : 'Yes, leave', leave, 'pink'); break;
+      case 'leave-confirm': S.sheet = null; leaveAsk(); break;
       case 'theme': {
         const r = document.documentElement;
         const dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
@@ -690,6 +724,12 @@
     }
   });
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (S.ask) { S.ask = null; renderLayer(); }
+      else if (S.sheet) { S.sheet = null; renderLayer(); }
+      else if (S.screen === 'table' && !S.reveals.length) leaveAsk();
+      return;
+    }
     if (e.key === 'Enter' && e.target.id === 'code') startGuest(e.target.value);
     if (e.key === 'Enter' && e.target.id === 'name' && S.screen === 'join') startGuest(S.joinCode);
   });
